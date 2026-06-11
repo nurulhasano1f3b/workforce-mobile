@@ -256,6 +256,17 @@ class LocalDb {
     await d.delete(tShifts);
   }
 
+  /// Wipe all user-owned tables in one transaction — call on logout so no
+  /// data leaks to the next account that logs in on the same device.
+  Future<void> clearUserData() async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete(tPunches);
+      await txn.delete(tShifts);
+      await txn.delete(tNotifications);
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Notifications helpers
   // ---------------------------------------------------------------------------

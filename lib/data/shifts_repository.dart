@@ -56,7 +56,11 @@ class ShiftsRepository {
 
   void updateToken(String? token) {
     _token = token;
-    if (token != null) _refreshFromServer();
+    if (token == null) {
+      shifts.value = const [];
+    } else {
+      _refreshFromServer();
+    }
   }
 
   // ---------------------------------------------------------------------------

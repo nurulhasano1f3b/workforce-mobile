@@ -55,7 +55,11 @@ class NotificationsRepository {
 
   void updateToken(String? token) {
     _token = token;
-    if (token != null) _refreshFromServer();
+    if (token == null) {
+      notifications.value = const [];
+    } else {
+      _refreshFromServer();
+    }
   }
 
   // ---------------------------------------------------------------------------

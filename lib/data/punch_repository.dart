@@ -110,6 +110,7 @@ class PunchRepository {
     _token = null;
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _emailKey);
+    await _db.clearUserData();
     punches.value = const [];
     lastPunchType.value = 'none';
   }
