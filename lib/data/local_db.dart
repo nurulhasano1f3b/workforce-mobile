@@ -15,7 +15,7 @@ import 'package:sqflite/sqflite.dart';
 /// A punch with pending_sync = 1 has not yet received a 201 from the server.
 
 const _dbName = 'workforce.db';
-const _dbVersion = 3;
+const _dbVersion = 4;
 
 /// Column names — defined as constants to catch typos at compile time.
 const tPunches = 'punches';
@@ -49,6 +49,10 @@ const colBody = 'body';
 const colReadAt = 'read_at';
 const colCreatedAt = 'created_at';
 const colPendingRead = 'pending_read';
+
+// Roster requests table
+const tRosterRequests = 'roster_requests';
+const colRequestId = 'request_id';
 
 // Availability tables
 const tAvailPatterns = 'avail_patterns';
@@ -119,6 +123,7 @@ class LocalDb {
     await _createShiftsTable(db);
     await _createNotificationsTable(db);
     await _createAvailTables(db);
+    await _createRosterRequestsTable(db);
   }
 
   Future<void> _createShiftsTable(Database db) async {
@@ -173,6 +178,18 @@ class LocalDb {
     ''');
   }
 
+  Future<void> _createRosterRequestsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $tRosterRequests (
+        $colRequestId INTEGER PRIMARY KEY,
+        $colStatus    TEXT    NOT NULL,
+        $colStartsAt  TEXT    NOT NULL,
+        $colEndsAt    TEXT    NOT NULL,
+        $colDept      TEXT
+      )
+    ''');
+  }
+
   // Migrations
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
@@ -181,6 +198,9 @@ class LocalDb {
     }
     if (oldVersion < 3) {
       await _createAvailTables(db);
+    }
+    if (oldVersion < 4) {
+      await _createRosterRequestsTable(db);
     }
   }
 
@@ -298,6 +318,7 @@ class LocalDb {
       await txn.delete(tNotifications);
       await txn.delete(tAvailPatterns);
       await txn.delete(tAvailExceptions);
+      await txn.delete(tRosterRequests);
     });
   }
 
@@ -372,5 +393,31 @@ class LocalDb {
     final d = await db;
     await d.insert(tAvailExceptions, row,
         conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Roster requests helpers
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> queryRosterRequests() async {
+    final d = await db;
+    return d.query(tRosterRequests, orderBy: '$colStartsAt ASC');
+  }
+
+  Future<void> replaceRosterRequests(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete(tRosterRequests);
+      for (final row in rows) {
+        await txn.insert(tRosterRequests, row,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
+
+  Future<void> deleteRosterRequest(int requestId) async {
+    final d = await db;
+    await d.delete(tRosterRequests,
+        where: '$colRequestId = ?', whereArgs: [requestId]);
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,10 +38,10 @@ class AccountMenu extends ConsumerWidget {
             userRepo.clear();
 
             if (context.mounted) {
-              Navigator.of(context).pushAndRemoveUntil(
+              unawaited(Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
                 (_) => false,
-              );
+              ));
             }
         }
       },
