@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'availability_screen.dart';
 import 'notifications_screen.dart';
 import 'punch_screen.dart';
 import 'shifts_screen.dart';
@@ -38,6 +39,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: const [
           ShiftsScreen(),
           PunchScreen(),
+          AvailabilityScreen(),
           NotificationsScreen(),
         ],
       ),
@@ -64,12 +66,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             activeIcon: Icon(Icons.fingerprint),
             label: 'Punch',
           ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.event_available_outlined),
+            activeIcon: Icon(Icons.event_available_rounded),
+            label: 'Availability',
+          ),
           BottomNavigationBarItem(
             icon: unreadCount > 0
                 ? Badge(
                     label: Text('$unreadCount'),
-                    child: const Icon(
-                        Icons.notifications_none_rounded),
+                    child: const Icon(Icons.notifications_none_rounded),
                   )
                 : const Icon(Icons.notifications_none_rounded),
             activeIcon: unreadCount > 0

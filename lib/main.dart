@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
+import 'data/availability_repository.dart';
 import 'data/notifications_repository.dart';
 import 'data/providers.dart';
 import 'data/punch_repository.dart';
@@ -48,13 +49,15 @@ void main() async {
   final punchRepo = PunchRepository();
   await punchRepo.init();
 
-  // Pre-warm shifts, notifications, and user profile with the stored token.
+  // Pre-warm shifts, notifications, availability, and user profile.
   final shiftsRepo = ShiftsRepository();
   final notifRepo = NotificationsRepository();
+  final availRepo = AvailabilityRepository();
   final userRepo = UserRepository();
   if (punchRepo.isLoggedIn) {
     await shiftsRepo.init(punchRepo.token);
     await notifRepo.init(punchRepo.token);
+    await availRepo.init(punchRepo.token);
     userRepo.updateToken(punchRepo.token);
   }
 
@@ -64,6 +67,7 @@ void main() async {
         punchRepositoryProvider.overrideWithValue(punchRepo),
         shiftsRepositoryProvider.overrideWithValue(shiftsRepo),
         notificationsRepositoryProvider.overrideWithValue(notifRepo),
+        availabilityRepositoryProvider.overrideWithValue(availRepo),
         userRepositoryProvider.overrideWithValue(userRepo),
       ],
       child: const WorkforceApp(),

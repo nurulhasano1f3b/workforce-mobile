@@ -26,11 +26,13 @@ class AccountMenu extends ConsumerWidget {
             final punchRepo = ref.read(punchRepositoryProvider);
             final shiftsRepo = ref.read(shiftsRepositoryProvider);
             final notifRepo = ref.read(notificationsRepositoryProvider);
+            final availRepo = ref.read(availabilityRepositoryProvider);
             final userRepo = ref.read(userRepositoryProvider);
 
             await punchRepo.logout();
             shiftsRepo.updateToken(null);
             notifRepo.updateToken(null);
+            availRepo.updateToken(null);
             userRepo.clear();
 
             if (context.mounted) {

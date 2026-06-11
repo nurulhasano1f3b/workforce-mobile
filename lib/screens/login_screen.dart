@@ -53,6 +53,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Notify other repositories of the new token then navigate.
       ref.read(shiftsRepositoryProvider).updateToken(repo.token);
       ref.read(notificationsRepositoryProvider).updateToken(repo.token);
+      ref.read(availabilityRepositoryProvider).updateToken(repo.token);
       ref.read(userRepositoryProvider).updateToken(repo.token);
 
       unawaited(

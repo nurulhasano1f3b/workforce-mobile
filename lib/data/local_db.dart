@@ -15,7 +15,7 @@ import 'package:sqflite/sqflite.dart';
 /// A punch with pending_sync = 1 has not yet received a 201 from the server.
 
 const _dbName = 'workforce.db';
-const _dbVersion = 2;
+const _dbVersion = 3;
 
 /// Column names — defined as constants to catch typos at compile time.
 const tPunches = 'punches';
@@ -49,6 +49,15 @@ const colBody = 'body';
 const colReadAt = 'read_at';
 const colCreatedAt = 'created_at';
 const colPendingRead = 'pending_read';
+
+// Availability tables
+const tAvailPatterns = 'avail_patterns';
+const tAvailExceptions = 'avail_exceptions';
+const colWeekday = 'weekday';
+const colStartMin = 'start_min';
+const colEndMin = 'end_min';
+const colDay = 'day';
+const colAvailable = 'available';
 
 class LocalDb {
   LocalDb._();
@@ -109,6 +118,7 @@ class LocalDb {
 
     await _createShiftsTable(db);
     await _createNotificationsTable(db);
+    await _createAvailTables(db);
   }
 
   Future<void> _createShiftsTable(Database db) async {
@@ -144,11 +154,33 @@ class LocalDb {
     ''');
   }
 
-  // Migrations: version 1 → 2 adds shifts + notifications tables.
+  Future<void> _createAvailTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE $tAvailPatterns (
+        $colWeekday   INTEGER NOT NULL,
+        $colStartMin  INTEGER NOT NULL,
+        $colEndMin    INTEGER NOT NULL,
+        PRIMARY KEY ($colWeekday, $colStartMin)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE $tAvailExceptions (
+        $colDay       TEXT    NOT NULL PRIMARY KEY,
+        $colAvailable INTEGER NOT NULL,
+        $colStartMin  INTEGER,
+        $colEndMin    INTEGER
+      )
+    ''');
+  }
+
+  // Migrations
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createShiftsTable(db);
       await _createNotificationsTable(db);
+    }
+    if (oldVersion < 3) {
+      await _createAvailTables(db);
     }
   }
 
@@ -264,6 +296,8 @@ class LocalDb {
       await txn.delete(tPunches);
       await txn.delete(tShifts);
       await txn.delete(tNotifications);
+      await txn.delete(tAvailPatterns);
+      await txn.delete(tAvailExceptions);
     });
   }
 
@@ -307,5 +341,36 @@ class LocalDb {
       where: '$colNotifId = ?',
       whereArgs: [notifId],
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Availability helpers
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> queryAvailPatterns() async {
+    final d = await db;
+    return d.query(tAvailPatterns, orderBy: '$colWeekday ASC, $colStartMin ASC');
+  }
+
+  Future<void> replaceAvailPatterns(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete(tAvailPatterns);
+      for (final row in rows) {
+        await txn.insert(tAvailPatterns, row,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> queryAvailExceptions() async {
+    final d = await db;
+    return d.query(tAvailExceptions, orderBy: '$colDay ASC');
+  }
+
+  Future<void> upsertAvailException(Map<String, dynamic> row) async {
+    final d = await db;
+    await d.insert(tAvailExceptions, row,
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }

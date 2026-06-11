@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'availability_repository.dart';
 import 'notifications_repository.dart';
 import 'punch_repository.dart';
 import 'shifts_repository.dart';
@@ -36,6 +37,13 @@ final notificationsRepositoryProvider =
 /// UserRepository — fetches and caches the /me profile.
 final userRepositoryProvider = Provider<UserRepository>((ref) {
   final repo = UserRepository();
+  ref.onDispose(repo.dispose);
+  return repo;
+});
+
+/// AvailabilityRepository — weekly pattern + exceptions.
+final availabilityRepositoryProvider = Provider<AvailabilityRepository>((ref) {
+  final repo = AvailabilityRepository();
   ref.onDispose(repo.dispose);
   return repo;
 });
