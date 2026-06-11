@@ -1,0 +1,20 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Architecture rules
+    avoid_dynamic_calls: true
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    use_string_buffers: false  # model flag encoder is intentionally simple
+
+    # Safety
+    unawaited_futures: true
+    cancel_subscriptions: true
+    close_sinks: true
+
+analyzer:
+  errors:
+    # Treat missing awaits as errors — the punch flow must never accidentally
+    # block the UI thread by forgetting unawaited().
+    unawaited_futures: error

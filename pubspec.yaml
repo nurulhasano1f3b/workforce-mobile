@@ -1,0 +1,39 @@
+name: workforce_app
+description: Workforce management — punch screen prototype.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP
+  http: ^1.2.1
+
+  # Local SQLite — sqflite avoids drift's code-generation step.
+  # No .g.dart files needed; schema is hand-written in local_db.dart.
+  sqflite: ^2.3.3+1
+  sqflite_common_ffi: ^2.3.3       # needed for Windows/Linux desktop
+  sqflite_common_ffi_web: ^0.4.5+1 # needed for web (WASM SQLite)
+  path: ^1.9.0
+
+  # State management — Riverpod gives us compile-safe providers and
+  # zero boilerplate compared with ChangeNotifier for this pattern.
+  flutter_riverpod: ^2.5.1
+
+  # Connectivity detection for the offline queue flush.
+  connectivity_plus: ^6.0.3
+
+  # Secure token storage (JWT lives here, not SharedPreferences).
+  flutter_secure_storage: ^9.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
