@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -8,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'data/availability_repository.dart';
+import 'data/manager_repository.dart';
 import 'data/notifications_repository.dart';
 import 'data/providers.dart';
 import 'data/punch_repository.dart';
@@ -49,16 +51,18 @@ void main() async {
   final punchRepo = PunchRepository();
   await punchRepo.init();
 
-  // Pre-warm shifts, notifications, availability, and user profile.
+  // Pre-warm shifts, notifications, availability, user profile, and manager.
   final shiftsRepo = ShiftsRepository();
   final notifRepo = NotificationsRepository();
   final availRepo = AvailabilityRepository();
   final userRepo = UserRepository();
+  final managerRepo = ManagerRepository();
   if (punchRepo.isLoggedIn) {
     await shiftsRepo.init(punchRepo.token);
     await notifRepo.init(punchRepo.token);
     await availRepo.init(punchRepo.token);
     userRepo.updateToken(punchRepo.token);
+    unawaited(managerRepo.init(punchRepo.token));
   }
 
   runApp(
@@ -69,6 +73,7 @@ void main() async {
         notificationsRepositoryProvider.overrideWithValue(notifRepo),
         availabilityRepositoryProvider.overrideWithValue(availRepo),
         userRepositoryProvider.overrideWithValue(userRepo),
+        managerRepositoryProvider.overrideWithValue(managerRepo),
       ],
       child: const WorkforceApp(),
     ),

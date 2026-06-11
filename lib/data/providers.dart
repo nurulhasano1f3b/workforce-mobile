@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'availability_repository.dart';
+import 'manager_repository.dart';
 import 'notifications_repository.dart';
 import 'punch_repository.dart';
 import 'shifts_repository.dart';
@@ -44,6 +45,14 @@ final userRepositoryProvider = Provider<UserRepository>((ref) {
 /// AvailabilityRepository — weekly pattern + exceptions.
 final availabilityRepositoryProvider = Provider<AvailabilityRepository>((ref) {
   final repo = AvailabilityRepository();
+  ref.onDispose(repo.dispose);
+  return repo;
+});
+
+/// ManagerRepository — team daily view, shift creation/publish. isManager is
+/// false for non-manager users (403 from /m/roster/staff).
+final managerRepositoryProvider = Provider<ManagerRepository>((ref) {
+  final repo = ManagerRepository();
   ref.onDispose(repo.dispose);
   return repo;
 });

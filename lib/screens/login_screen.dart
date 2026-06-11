@@ -55,6 +55,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ref.read(notificationsRepositoryProvider).updateToken(repo.token);
       ref.read(availabilityRepositoryProvider).updateToken(repo.token);
       ref.read(userRepositoryProvider).updateToken(repo.token);
+      ref.read(managerRepositoryProvider).updateToken(repo.token);
 
       unawaited(
         Navigator.of(context).pushReplacement(
