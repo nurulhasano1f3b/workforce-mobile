@@ -103,6 +103,7 @@ class _ManagerScreenState extends ConsumerState<ManagerScreen> {
   Widget build(BuildContext context) {
     final date = ref.watch(_selectedDateProvider).valueOrNull ?? DateTime.now();
     final isLoading = ref.watch(_loadingProvider).valueOrNull ?? false;
+    final canEdit = ref.read(managerRepositoryProvider).canEdit.value;
     final dailyAsync = ref.watch(_dailyViewProvider);
 
     return Scaffold(
@@ -163,6 +164,7 @@ class _ManagerScreenState extends ConsumerState<ManagerScreen> {
                       ? const _EmptyState()
                       : _StaffList(
                           views: views,
+                          canEdit: canEdit,
                           onAddShift: (v) => _openCreateSheet(forStaff: v),
                         ),
                   loading: () => const _EmptyState(),
@@ -173,14 +175,16 @@ class _ManagerScreenState extends ConsumerState<ManagerScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openCreateSheet(),
-        backgroundColor: const Color(0xFF1B8A5A),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add Shift',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-      ),
+      floatingActionButton: canEdit
+          ? FloatingActionButton.extended(
+              onPressed: () => _openCreateSheet(),
+              backgroundColor: const Color(0xFF1B8A5A),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add Shift',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+            )
+          : null,
     );
   }
 }
@@ -272,8 +276,13 @@ class _DateBar extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _StaffList extends StatelessWidget {
-  const _StaffList({required this.views, required this.onAddShift});
+  const _StaffList({
+    required this.views,
+    required this.canEdit,
+    required this.onAddShift,
+  });
   final List<StaffDayView> views;
+  final bool canEdit;
   final void Function(StaffDayView) onAddShift;
 
   @override
@@ -285,11 +294,11 @@ class _StaffList extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
         if (withShifts.isNotEmpty) ...[
-          _SectionLabel(
-              label: 'Scheduled (${withShifts.length})'),
+          _SectionLabel(label: 'Scheduled (${withShifts.length})'),
           const SizedBox(height: 8),
           ...withShifts.map((v) => _StaffCard(
                 view: v,
+                canEdit: canEdit,
                 onAddShift: () => onAddShift(v),
               )),
           const SizedBox(height: 16),
@@ -298,6 +307,7 @@ class _StaffList extends StatelessWidget {
         const SizedBox(height: 8),
         ...withoutShifts.map((v) => _StaffCard(
               view: v,
+              canEdit: canEdit,
               onAddShift: () => onAddShift(v),
             )),
       ],
@@ -310,8 +320,13 @@ class _StaffList extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _StaffCard extends ConsumerStatefulWidget {
-  const _StaffCard({required this.view, required this.onAddShift});
+  const _StaffCard({
+    required this.view,
+    required this.canEdit,
+    required this.onAddShift,
+  });
   final StaffDayView view;
+  final bool canEdit;
   final VoidCallback onAddShift;
 
   @override
@@ -415,8 +430,8 @@ class _StaffCardState extends ConsumerState<_StaffCard> {
                     ],
                   ),
                 ),
-                // Add shift button (only when not scheduled)
-                if (v.shifts.isEmpty)
+                // Add shift button (only when not scheduled and user can edit)
+                if (v.shifts.isEmpty && widget.canEdit)
                   GestureDetector(
                     onTap: widget.onAddShift,
                     child: Container(
@@ -450,13 +465,13 @@ class _StaffCardState extends ConsumerState<_StaffCard> {
                     shift: sh,
                     publishing: _publishing,
                     deleting: _deleting,
-                    onPublish: sh.status == 'draft'
+                    onPublish: widget.canEdit && sh.status == 'draft'
                         ? () => _publish(sh.id)
                         : null,
-                    onDelete: sh.status != 'published'
+                    onDelete: widget.canEdit && sh.status != 'published'
                         ? () => _delete(sh.id)
                         : null,
-                    onAddAnother: widget.onAddShift,
+                    onAddAnother: widget.canEdit ? widget.onAddShift : null,
                   );
                 }).toList(),
               ),
@@ -531,7 +546,7 @@ class _ShiftRow extends StatelessWidget {
     required this.deleting,
     this.onPublish,
     this.onDelete,
-    required this.onAddAnother,
+    this.onAddAnother,
   });
 
   final TeamShift shift;
@@ -539,7 +554,7 @@ class _ShiftRow extends StatelessWidget {
   final bool deleting;
   final VoidCallback? onPublish;
   final VoidCallback? onDelete;
-  final VoidCallback onAddAnother;
+  final VoidCallback? onAddAnother;
 
   @override
   Widget build(BuildContext context) {
@@ -612,6 +627,7 @@ class _ShiftRow extends StatelessWidget {
                     onTap: deleting ? null : onDelete,
                   ),
                 const Spacer(),
+                if (onAddAnother != null)
                 GestureDetector(
                   onTap: onAddAnother,
                   child: const Text(

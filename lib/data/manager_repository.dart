@@ -21,8 +21,11 @@ class ManagerRepository {
   // Public state
   // ---------------------------------------------------------------------------
 
-  /// True if the current user has manager (roster.edit) access.
+  /// True if the current user has roster.view_team (shows the Manager tab).
   final ValueNotifier<bool> isManager = ValueNotifier(false);
+
+  /// True if the current user also has roster.edit (shows create/publish/delete).
+  final ValueNotifier<bool> canEdit = ValueNotifier(false);
 
   final ValueNotifier<List<StaffMember>> staff = ValueNotifier(const []);
 
@@ -49,6 +52,7 @@ class ManagerRepository {
     _token = token;
     if (token == null) {
       isManager.value = false;
+      canEdit.value = false;
       staff.value = const [];
       dailyView.value = const [];
     } else {
@@ -76,21 +80,41 @@ class ManagerRepository {
   Future<void> _fetchStaff() async {
     if (_token == null) return;
     try {
-      final resp = await _http.get(
-        Uri.parse('$_base/m/roster/staff'),
-        headers: {'Authorization': 'Bearer $_token'},
-      );
-      if (resp.statusCode == 200) {
-        final list = jsonDecode(resp.body) as List<dynamic>;
+      // Run staff list + edit-permission probe in parallel.
+      final results = await Future.wait([
+        _http.get(
+          Uri.parse('$_base/m/roster/staff'),
+          headers: {'Authorization': 'Bearer $_token'},
+        ),
+        // Probe edit permission: POST with empty body → 400 means allowed,
+        // 403 means view-only. Any other status is treated as no edit access.
+        _http.post(
+          Uri.parse('$_base/m/roster'),
+          headers: {
+            'Authorization': 'Bearer $_token',
+            'Content-Type': 'application/json',
+          },
+          body: '{}',
+        ),
+      ]);
+
+      final staffResp = results[0];
+      final editProbe = results[1];
+
+      if (staffResp.statusCode == 200) {
+        final list = jsonDecode(staffResp.body) as List<dynamic>;
         staff.value = list
             .map((e) => StaffMember.fromJson(e as Map<String, dynamic>))
             .toList();
         isManager.value = true;
+        // 400 = missing required fields → we have the permission, just bad input.
+        canEdit.value = editProbe.statusCode == 400;
       } else {
         isManager.value = false;
+        canEdit.value = false;
       }
     } on SocketException {
-      // Offline — leave isManager as-is.
+      // Offline — leave state as-is.
     } on http.ClientException {
       // Network error.
     }
@@ -211,6 +235,7 @@ class ManagerRepository {
 
   void dispose() {
     isManager.dispose();
+    canEdit.dispose();
     staff.dispose();
     selectedDate.dispose();
     dailyView.dispose();
