@@ -67,6 +67,9 @@ class ShiftRequest {
     required this.startsAt,
     required this.endsAt,
     this.department,
+    this.prevStartsAt,
+    this.prevEndsAt,
+    this.prevDepartment,
   });
 
   final int id;
@@ -75,12 +78,27 @@ class ShiftRequest {
   final DateTime endsAt;
   final String? department;
 
+  /// Previous times — non-null when a published shift was edited and the
+  /// new time fell outside the employee's availability.
+  final DateTime? prevStartsAt;
+  final DateTime? prevEndsAt;
+  final String? prevDepartment;
+
+  bool get isEdit => prevStartsAt != null;
+
   factory ShiftRequest.fromJson(Map<String, dynamic> json) => ShiftRequest(
         id: json['id'] as int,
         status: (json['status'] as String?) ?? 'pending',
         startsAt: DateTime.parse(json['starts_at'] as String),
         endsAt: DateTime.parse(json['ends_at'] as String),
         department: json['department'] as String?,
+        prevStartsAt: json['prev_starts_at'] != null
+            ? DateTime.parse(json['prev_starts_at'] as String)
+            : null,
+        prevEndsAt: json['prev_ends_at'] != null
+            ? DateTime.parse(json['prev_ends_at'] as String)
+            : null,
+        prevDepartment: json['prev_department'] as String?,
       );
 
   Map<String, dynamic> toSqliteRow() => {
@@ -89,6 +107,9 @@ class ShiftRequest {
         'starts_at': startsAt.toIso8601String(),
         'ends_at': endsAt.toIso8601String(),
         'department': department,
+        'prev_starts_at': prevStartsAt?.toIso8601String(),
+        'prev_ends_at': prevEndsAt?.toIso8601String(),
+        'prev_dept': prevDepartment,
       };
 
   factory ShiftRequest.fromSqlite(Map<String, dynamic> row) => ShiftRequest(
@@ -97,6 +118,13 @@ class ShiftRequest {
         startsAt: DateTime.parse(row['starts_at'] as String),
         endsAt: DateTime.parse(row['ends_at'] as String),
         department: row['department'] as String?,
+        prevStartsAt: row['prev_starts_at'] != null
+            ? DateTime.parse(row['prev_starts_at'] as String)
+            : null,
+        prevEndsAt: row['prev_ends_at'] != null
+            ? DateTime.parse(row['prev_ends_at'] as String)
+            : null,
+        prevDepartment: row['prev_dept'] as String?,
       );
 
   Duration get duration => endsAt.difference(startsAt);

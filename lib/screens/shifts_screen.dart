@@ -249,10 +249,10 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Request card
+// Request card — tappable; opens detail sheet on tap
 // ---------------------------------------------------------------------------
 
-class _RequestCard extends StatefulWidget {
+class _RequestCard extends StatelessWidget {
   const _RequestCard({
     required this.request,
     required this.onAccept,
@@ -263,152 +263,114 @@ class _RequestCard extends StatefulWidget {
   final VoidCallback onDecline;
 
   @override
-  State<_RequestCard> createState() => _RequestCardState();
-}
-
-class _RequestCardState extends State<_RequestCard> {
-  bool _responding = false;
-
-  Future<void> _handle(VoidCallback callback) async {
-    setState(() => _responding = true);
-    callback();
-    // Keep spinner briefly then let the item disappear as the list updates.
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) setState(() => _responding = false);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final r = widget.request;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFBBF24).withAlpha(120)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFBBF24).withAlpha(30),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+    final r = request;
+    return GestureDetector(
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _ShiftRequestDetailSheet(
+          request: r,
+          onAccept: onAccept,
+          onDecline: onDecline,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFBBF24).withAlpha(30),
-                  borderRadius: BorderRadius.circular(6),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFBBF24).withAlpha(120)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFBBF24).withAlpha(30),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBBF24).withAlpha(30),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Shift Request',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFD97706),
+                    ),
+                  ),
                 ),
-                child: const Text(
-                  'Shift Request',
+                const Spacer(),
+                Text(
+                  r.department ?? 'General',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right_rounded,
+                    size: 18, color: Color(0xFF9CA3AF)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined,
+                    size: 14, color: Color(0xFF9CA3AF)),
+                const SizedBox(width: 6),
+                Text(
+                  _dateLabel(r.startsAt),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Icon(Icons.access_time_rounded,
+                    size: 14, color: Color(0xFF9CA3AF)),
+                const SizedBox(width: 4),
+                Text(
+                  '${_fmt(r.startsAt)} – ${_fmt(r.endsAt)}',
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF374151)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _durationLabel(r.duration),
+              style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+            ),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                Icon(Icons.touch_app_outlined, size: 13, color: Color(0xFFD97706)),
+                SizedBox(width: 4),
+                Text(
+                  'Tap to review and respond',
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
                     color: Color(0xFFD97706),
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              ),
-              const Spacer(),
-              Text(
-                r.department ?? 'General',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF6B7280),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_outlined,
-                  size: 14, color: Color(0xFF9CA3AF)),
-              const SizedBox(width: 6),
-              Text(
-                _dateLabel(r.startsAt),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF111827),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Icon(Icons.access_time_rounded,
-                  size: 14, color: Color(0xFF9CA3AF)),
-              const SizedBox(width: 4),
-              Text(
-                '${_formatTime(r.startsAt)} – ${_formatTime(r.endsAt)}',
-                style: const TextStyle(
-                    fontSize: 14, color: Color(0xFF374151)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _durationLabel(r.duration),
-            style: const TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
-          ),
-          const SizedBox(height: 12),
-          _responding
-              ? const Center(
-                  child: SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Color(0xFF1B8A5A),
-                    ),
-                  ),
-                )
-              : Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => _handle(widget.onDecline),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFB91C1C),
-                          side: const BorderSide(
-                              color: Color(0xFFFCA5A5)),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        child: const Text('Decline',
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => _handle(widget.onAccept),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1B8A5A),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        child: const Text('Accept',
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
-                      ),
-                    ),
-                  ],
-                ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -423,7 +385,7 @@ class _RequestCardState extends State<_RequestCard> {
     return '${_weekday(dt.weekday)}, ${dt.day} ${_month(dt.month)}';
   }
 
-  String _formatTime(DateTime dt) {
+  String _fmt(DateTime dt) {
     final h = dt.hour;
     final m = dt.minute.toString().padLeft(2, '0');
     final period = h >= 12 ? 'PM' : 'AM';
@@ -438,9 +400,8 @@ class _RequestCardState extends State<_RequestCard> {
     return '${hours}h ${mins}m shift';
   }
 
-  String _weekday(int w) => const [
-        '', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
-      ][w];
+  String _weekday(int w) =>
+      const ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][w];
 
   String _month(int m) => const [
         '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -785,4 +746,406 @@ class _EmptyShifts extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shift request detail sheet — shows full info + both Accept / Decline
+// ---------------------------------------------------------------------------
+
+class _ShiftRequestDetailSheet extends StatefulWidget {
+  const _ShiftRequestDetailSheet({
+    required this.request,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final ShiftRequest request;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  State<_ShiftRequestDetailSheet> createState() =>
+      _ShiftRequestDetailSheetState();
+}
+
+class _ShiftRequestDetailSheetState extends State<_ShiftRequestDetailSheet> {
+  bool _loading = false;
+
+  Future<void> _respond(bool accepting) async {
+    setState(() => _loading = true);
+    accepting ? widget.onAccept() : widget.onDecline();
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.request;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 32,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD1D5DB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Title
+          Text(
+            r.isEdit ? 'Shift Change Request' : 'Shift Request',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            r.isEdit
+                ? 'Your shift has been updated. Review the change, then accept or decline.'
+                : 'Review the details below, then accept or decline.',
+            style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 20),
+
+          // Before / after cards (edit case) or single card (new shift)
+          if (r.isEdit)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _ShiftMiniCard(
+                    label: 'Before',
+                    startsAt: r.prevStartsAt!,
+                    endsAt: r.prevEndsAt!,
+                    department: r.prevDepartment,
+                    accent: const Color(0xFF6B7280),
+                    bgAlpha: 14,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 28),
+                  child: Icon(Icons.arrow_forward_rounded,
+                      size: 18, color: Colors.grey.shade400),
+                ),
+                Expanded(
+                  child: _ShiftMiniCard(
+                    label: 'After',
+                    startsAt: r.startsAt,
+                    endsAt: r.endsAt,
+                    department: r.department,
+                    accent: const Color(0xFF1B8A5A),
+                    bgAlpha: 14,
+                  ),
+                ),
+              ],
+            )
+          else
+            _ShiftDetailCard(request: r),
+
+          const SizedBox(height: 24),
+
+          if (_loading)
+            const Center(
+              child: SizedBox(
+                height: 32,
+                width: 32,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Color(0xFF1B8A5A),
+                ),
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _respond(false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFB91C1C),
+                      side: const BorderSide(color: Color(0xFFFCA5A5)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Decline',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _respond(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1B8A5A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Accept',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _dateLabel(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    final diff = day.difference(today).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Tomorrow';
+    return '${_weekday(dt.weekday)}, ${dt.day} ${_month(dt.month)}';
+  }
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hour = h % 12 == 0 ? 12 : h % 12;
+    return '$hour:$m $period';
+  }
+
+  String _weekday(int w) =>
+      const ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][w];
+
+  String _month(int m) => const [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ][m];
+}
+
+// ---------------------------------------------------------------------------
+// Single shift detail card (new-shift request)
+// ---------------------------------------------------------------------------
+
+class _ShiftDetailCard extends StatelessWidget {
+  const _ShiftDetailCard({required this.request});
+  final ShiftRequest request;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = request;
+    final d = r.duration;
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final durationLabel = m == 0 ? '${h}h shift' : '${h}h ${m}m shift';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBBF24).withAlpha(12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: const Color(0xFFFBBF24).withAlpha(80), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined,
+                  size: 14, color: Color(0xFFD97706)),
+              const SizedBox(width: 6),
+              Text(
+                _dateLabel(r.startsAt),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFD97706),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.access_time_rounded,
+                  size: 14, color: Color(0xFF6B7280)),
+              const SizedBox(width: 6),
+              Text(
+                '${_fmt(r.startsAt)} – ${_fmt(r.endsAt)}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF111827),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.timer_outlined,
+                  size: 13, color: Color(0xFF9CA3AF)),
+              const SizedBox(width: 5),
+              Text(
+                '$durationLabel  ·  ${r.department ?? 'General'}',
+                style:
+                    const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _dateLabel(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    final diff = day.difference(today).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Tomorrow';
+    return '${_weekday(dt.weekday)}, ${dt.day} ${_month(dt.month)}';
+  }
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hour = h % 12 == 0 ? 12 : h % 12;
+    return '$hour:$m $period';
+  }
+
+  String _weekday(int w) =>
+      const ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][w];
+
+  String _month(int m) => const [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ][m];
+}
+
+// ---------------------------------------------------------------------------
+// Mini shift card used in before/after comparison
+// ---------------------------------------------------------------------------
+
+class _ShiftMiniCard extends StatelessWidget {
+  const _ShiftMiniCard({
+    required this.label,
+    required this.startsAt,
+    required this.endsAt,
+    required this.accent,
+    required this.bgAlpha,
+    this.department,
+  });
+
+  final String label;
+  final DateTime startsAt;
+  final DateTime endsAt;
+  final String? department;
+  final Color accent;
+  final int bgAlpha;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = endsAt.difference(startsAt);
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final durationLabel = m == 0 ? '${h}h' : '${h}h ${m}m';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: accent.withAlpha(bgAlpha),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withAlpha(60), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: accent,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _dateLabel(startsAt),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF374151),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${_fmt(startsAt)} –\n${_fmt(endsAt)}',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$durationLabel  ·  ${department ?? 'General'}',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _dateLabel(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    final diff = day.difference(today).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Tomorrow';
+    return '${_weekday(dt.weekday)}, ${dt.day} ${_month(dt.month)}';
+  }
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hour = h % 12 == 0 ? 12 : h % 12;
+    return '$hour:$m $period';
+  }
+
+  String _weekday(int w) =>
+      const ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][w];
+
+  String _month(int m) => const [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ][m];
 }

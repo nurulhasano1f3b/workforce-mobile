@@ -15,7 +15,7 @@ import 'package:sqflite/sqflite.dart';
 /// A punch with pending_sync = 1 has not yet received a 201 from the server.
 
 const _dbName = 'workforce.db';
-const _dbVersion = 4;
+const _dbVersion = 5;
 
 /// Column names — defined as constants to catch typos at compile time.
 const tPunches = 'punches';
@@ -53,6 +53,9 @@ const colPendingRead = 'pending_read';
 // Roster requests table
 const tRosterRequests = 'roster_requests';
 const colRequestId = 'request_id';
+const colPrevStartsAt = 'prev_starts_at';
+const colPrevEndsAt = 'prev_ends_at';
+const colPrevDept = 'prev_dept';
 
 // Availability tables
 const tAvailPatterns = 'avail_patterns';
@@ -181,11 +184,14 @@ class LocalDb {
   Future<void> _createRosterRequestsTable(Database db) async {
     await db.execute('''
       CREATE TABLE $tRosterRequests (
-        $colRequestId INTEGER PRIMARY KEY,
-        $colStatus    TEXT    NOT NULL,
-        $colStartsAt  TEXT    NOT NULL,
-        $colEndsAt    TEXT    NOT NULL,
-        $colDept      TEXT
+        $colRequestId   INTEGER PRIMARY KEY,
+        $colStatus      TEXT    NOT NULL,
+        $colStartsAt    TEXT    NOT NULL,
+        $colEndsAt      TEXT    NOT NULL,
+        $colDept        TEXT,
+        $colPrevStartsAt TEXT,
+        $colPrevEndsAt   TEXT,
+        $colPrevDept     TEXT
       )
     ''');
   }
@@ -201,6 +207,14 @@ class LocalDb {
     }
     if (oldVersion < 4) {
       await _createRosterRequestsTable(db);
+    }
+    if (oldVersion < 5) {
+      await db.execute(
+          'ALTER TABLE $tRosterRequests ADD COLUMN $colPrevStartsAt TEXT');
+      await db.execute(
+          'ALTER TABLE $tRosterRequests ADD COLUMN $colPrevEndsAt TEXT');
+      await db.execute(
+          'ALTER TABLE $tRosterRequests ADD COLUMN $colPrevDept TEXT');
     }
   }
 

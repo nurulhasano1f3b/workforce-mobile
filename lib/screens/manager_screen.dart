@@ -362,7 +362,30 @@ class _StaffCardState extends ConsumerState<_StaffCard> {
     );
   }
 
-  Future<void> _delete(int shiftId) async {
+  Future<void> _delete(int shiftId, {bool isPublished = false}) async {
+    if (isPublished) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cancel published shift?'),
+          content: const Text(
+              'The employee will receive a cancellation notification.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFB91C1C)),
+              child: const Text('Cancel shift'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
     setState(() => _deleting = true);
     final ok = await ref.read(managerRepositoryProvider).deleteShift(shiftId);
     if (!mounted) return;
@@ -480,8 +503,9 @@ class _StaffCardState extends ConsumerState<_StaffCard> {
                     onPublish: widget.canEdit && sh.status == 'draft'
                         ? () => _publish(sh.id)
                         : null,
-                    onDelete: widget.canEdit && sh.status != 'published'
-                        ? () => _delete(sh.id)
+                    onDelete: widget.canEdit
+                        ? () => _delete(sh.id,
+                            isPublished: sh.status == 'published')
                         : null,
                     onAddAnother: widget.canEdit ? widget.onAddShift : null,
                   );
@@ -593,13 +617,25 @@ class _ShiftRow extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  '${_fmtTime(shift.startsAt)} – ${_fmtTime(shift.endsAt)}  ·  ${shift.department ?? 'General'}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF374151),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_fmtTime(shift.startsAt)} – ${_fmtTime(shift.endsAt)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF374151),
+                      ),
+                    ),
+                    Text(
+                      '${_durationLabel(shift.duration)}  ·  ${shift.department ?? 'General'}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Row(
@@ -682,6 +718,13 @@ class _ShiftRow extends StatelessWidget {
     final period = h >= 12 ? 'PM' : 'AM';
     final hour = h % 12 == 0 ? 12 : h % 12;
     return '$hour:$m $period';
+  }
+
+  String _durationLabel(Duration d) {
+    final hours = d.inHours;
+    final mins = d.inMinutes % 60;
+    if (mins == 0) return '${hours}h';
+    return '${hours}h ${mins}m';
   }
 }
 
@@ -1001,6 +1044,8 @@ class _CreateShiftSheetState extends ConsumerState<_CreateShiftSheet> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  _DurationChip(startTime: _startTime, endTime: _endTime),
                   const SizedBox(height: 16),
 
                   // Department
@@ -1192,6 +1237,273 @@ class _StaffDropdown extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Duration chip — shows live duration between two TimeOfDay values.
+// ---------------------------------------------------------------------------
+
+class _DurationChip extends StatelessWidget {
+  const _DurationChip({required this.startTime, required this.endTime});
+  final TimeOfDay startTime;
+  final TimeOfDay endTime;
+
+  @override
+  Widget build(BuildContext context) {
+    final startMins = startTime.hour * 60 + startTime.minute;
+    var endMins = endTime.hour * 60 + endTime.minute;
+    if (endMins <= startMins) endMins += 24 * 60; // overnight
+    final duration = Duration(minutes: endMins - startMins);
+    final h = duration.inHours;
+    final m = duration.inMinutes % 60;
+    final label = m == 0 ? '${h}h shift' : '${h}h ${m}m shift';
+
+    return Row(
+      children: [
+        const Icon(Icons.timer_outlined, size: 14, color: Color(0xFF6B7280)),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF6B7280),
+          ),
+        ),
+        if (endMins - startMins > 24 * 60 - 1) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'overnight',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFD97706),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Confirm-edit sheet — shows before/after cards before committing changes.
+// ---------------------------------------------------------------------------
+
+class _ConfirmEditSheet extends StatelessWidget {
+  const _ConfirmEditSheet({
+    required this.original,
+    required this.newStartsAt,
+    required this.newEndsAt,
+    required this.newDepartment,
+  });
+
+  final TeamShift original;
+  final DateTime newStartsAt;
+  final DateTime newEndsAt;
+  final String newDepartment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD1D5DB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Confirm Changes',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Review what will change before saving.',
+            style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _ShiftSummaryCard(
+                  label: 'Before',
+                  startsAt: original.startsAt,
+                  endsAt: original.endsAt,
+                  department: original.department ?? 'general',
+                  accent: const Color(0xFF6B7280),
+                  dimmed: true,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Icon(Icons.arrow_forward_rounded,
+                    color: Color(0xFF9CA3AF), size: 20),
+              ),
+              Expanded(
+                child: _ShiftSummaryCard(
+                  label: 'After',
+                  startsAt: newStartsAt,
+                  endsAt: newEndsAt,
+                  department: newDepartment,
+                  accent: const Color(0xFF1B8A5A),
+                  dimmed: false,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF374151),
+                    side: const BorderSide(color: Color(0xFFD1D5DB)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Go Back',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B8A5A),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Save Changes',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShiftSummaryCard extends StatelessWidget {
+  const _ShiftSummaryCard({
+    required this.label,
+    required this.startsAt,
+    required this.endsAt,
+    required this.department,
+    required this.accent,
+    required this.dimmed,
+  });
+
+  final String label;
+  final DateTime startsAt;
+  final DateTime endsAt;
+  final String department;
+  final Color accent;
+  final bool dimmed;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = endsAt.difference(startsAt);
+    final h = duration.inHours;
+    final m = duration.inMinutes % 60;
+    final durationLabel = m == 0 ? '${h}h' : '${h}h ${m}m';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: dimmed ? const Color(0xFFF9FAFB) : accent.withAlpha(12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: dimmed ? const Color(0xFFE5E7EB) : accent.withAlpha(80),
+          width: dimmed ? 1 : 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: accent,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _fmt(startsAt),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: dimmed ? const Color(0xFF9CA3AF) : const Color(0xFF111827),
+            ),
+          ),
+          Text(
+            _fmt(endsAt),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: dimmed ? const Color(0xFF9CA3AF) : const Color(0xFF111827),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$durationLabel · ${_capitalize(department)}',
+            style: TextStyle(
+              fontSize: 12,
+              color:
+                  dimmed ? const Color(0xFFD1D5DB) : const Color(0xFF6B7280),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hour = h % 12 == 0 ? 12 : h % 12;
+    return '$hour:$m $period';
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+}
+
+// ---------------------------------------------------------------------------
 // Edit shift bottom sheet
 // ---------------------------------------------------------------------------
 
@@ -1260,10 +1572,6 @@ class _EditShiftSheetState extends ConsumerState<_EditShiftSheet> {
       Navigator.pop(context);
       return;
     }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
 
     final base = widget.shift.startsAt;
     var starts = DateTime(
@@ -1272,12 +1580,28 @@ class _EditShiftSheetState extends ConsumerState<_EditShiftSheet> {
         base.year, base.month, base.day, _endTime.hour, _endTime.minute);
     if (ends.isBefore(starts)) ends = ends.add(const Duration(days: 1));
     if (ends == starts) {
-      setState(() {
-        _saving = false;
-        _error = 'Start and end time cannot be the same.';
-      });
+      setState(() => _error = 'Start and end time cannot be the same.');
       return;
     }
+
+    // Show before/after confirmation sheet before committing.
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ConfirmEditSheet(
+        original: widget.shift,
+        newStartsAt: starts,
+        newEndsAt: ends,
+        newDepartment: _department,
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
 
     final repo = ref.read(managerRepositoryProvider);
     final result = await repo.updateShift(
@@ -1374,6 +1698,8 @@ class _EditShiftSheetState extends ConsumerState<_EditShiftSheet> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  _DurationChip(startTime: _startTime, endTime: _endTime),
                   const SizedBox(height: 16),
                   const _FieldLabel(label: 'Department'),
                   const SizedBox(height: 6),
