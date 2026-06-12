@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
+import '../config.dart';
 import '../data/providers.dart';
 import '../models/punch.dart';
 import '../widgets/account_menu.dart';
@@ -120,6 +124,33 @@ class PunchScreen extends ConsumerWidget {
                   error: (_, __) => const _EmptyHistory(),
                 ),
               ),
+
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const _FixRequestSheet(),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.flag_outlined,
+                        size: 14, color: Color(0xFF9CA3AF)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Report an issue with a punch',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF9CA3AF),
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -479,6 +510,323 @@ class _SyncIndicatorState extends State<_SyncIndicator>
         Icons.sync_rounded,
         size: 18,
         color: Colors.grey.shade500,
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fix Request bottom sheet
+// ---------------------------------------------------------------------------
+
+class _FixRequestSheet extends ConsumerStatefulWidget {
+  const _FixRequestSheet();
+
+  @override
+  ConsumerState<_FixRequestSheet> createState() => _FixRequestSheetState();
+}
+
+class _FixRequestSheetState extends ConsumerState<_FixRequestSheet> {
+  String _punchType = 'in';
+  DateTime _proposedDt = DateTime.now();
+  final _reasonCtrl = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  static const _punchTypes = ['in', 'out', 'unpaid_in', 'unpaid_out'];
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDateTime() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _proposedDt,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now(),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: Color(0xFF1B8A5A)),
+        ),
+        child: child!,
+      ),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_proposedDt),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: Color(0xFF1B8A5A)),
+        ),
+        child: child!,
+      ),
+    );
+    if (time == null) return;
+    setState(() {
+      _proposedDt = DateTime(
+          date.year, date.month, date.day, time.hour, time.minute);
+    });
+  }
+
+  Future<void> _submit() async {
+    final reason = _reasonCtrl.text.trim();
+    if (reason.isEmpty) {
+      setState(() => _error = 'Please enter a reason.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final token = ref.read(punchRepositoryProvider).token;
+    try {
+      final resp = await http.post(
+        Uri.parse('$kBaseUrl/m/timecard/fix-requests'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'punchType': _punchType,
+          'proposedTs': _proposedDt.toIso8601String(),
+          'reason': reason,
+        }),
+      );
+      if (!mounted) return;
+      setState(() => _saving = false);
+      if (resp.statusCode == 201) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fix request submitted.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        setState(() => _error = 'Failed to submit. Try again.');
+      }
+    } on SocketException {
+      if (mounted) setState(() => _error = 'No connection. Try again.');
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Failed to submit. Try again.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD1D5DB),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Report Punch Issue',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF111827),
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Submit a correction request to your manager.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+            ),
+            const SizedBox(height: 20),
+
+            const _SheetFieldLabel(label: 'Punch Type'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _punchTypes.map((t) {
+                final selected = _punchType == t;
+                return GestureDetector(
+                  onTap: () => setState(() => _punchType = t),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? const Color(0xFF1B8A5A)
+                          : const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _labelPunchType(t),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: selected
+                            ? Colors.white
+                            : const Color(0xFF374151),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            const _SheetFieldLabel(label: 'Proposed Time'),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _pickDateTime,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF9FAFB),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.access_time_rounded,
+                        size: 16, color: Color(0xFF9CA3AF)),
+                    const SizedBox(width: 8),
+                    Text(
+                      _fmtDt(_proposedDt),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            const _SheetFieldLabel(label: 'Reason'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _reasonCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Explain what happened...',
+                hintStyle: const TextStyle(
+                    color: Color(0xFF9CA3AF), fontSize: 14),
+                filled: true,
+                fillColor: const Color(0xFFF9FAFB),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                      color: Color(0xFF1B8A5A), width: 2),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+              ),
+            ),
+
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!,
+                  style: const TextStyle(
+                      color: Color(0xFFB91C1C), fontSize: 13)),
+            ],
+
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1B8A5A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Submit',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _labelPunchType(String t) => switch (t) {
+        'in' => 'Clock In',
+        'out' => 'Clock Out',
+        'unpaid_in' => 'Break Start',
+        'unpaid_out' => 'Break End',
+        _ => t,
+      };
+
+  String _fmtDt(DateTime dt) {
+    final h = dt.hour;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hour = h % 12 == 0 ? 12 : h % 12;
+    const months = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${dt.day} ${months[dt.month]}, $hour:$m $period';
+  }
+}
+
+class _SheetFieldLabel extends StatelessWidget {
+  const _SheetFieldLabel({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF6B7280),
+        letterSpacing: 0.5,
       ),
     );
   }

@@ -2,23 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/providers.dart';
-import 'availability_screen.dart';
+import 'feed_screen.dart';
 import 'manager_screen.dart';
-import 'notifications_screen.dart' show NotificationsScreen, notificationsListProvider;
+import 'me_screen.dart';
+import 'messages_screen.dart';
 import 'punch_screen.dart';
 import 'shifts_screen.dart';
 
-/// HomeScreen — the main scaffold after login.
-///
-/// Tabs:
-///   0 — My Shifts
-///   1 — Punch (the primary action, centre)
-///   2 — Availability
-///   3 — Notifications
-///   4 — Manager (only visible to users with roster.edit access)
-///
-/// Each tab is kept alive via IndexedStack so switching tabs doesn't rebuild
-/// or lose scroll position.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -27,7 +17,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int _tab = 1; // Start on the Punch tab.
+  int _tab = 1;
 
   bool _isManager = false;
 
@@ -41,7 +31,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
-    ref.read(managerRepositoryProvider).isManager.removeListener(_onManagerChanged);
+    ref
+        .read(managerRepositoryProvider)
+        .isManager
+        .removeListener(_onManagerChanged);
     super.dispose();
   }
 
@@ -54,22 +47,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final unreadCount =
-        ref.watch(notificationsListProvider).valueOrNull
-                ?.where((n) => !n.isRead)
-                .length ??
-            0;
-
-    // Tab index mapping: 0=Shifts, 1=Punch, 2=Avail, 3=Notif, [4=Manager if isManager]
     final screens = [
       const ShiftsScreen(),
       const PunchScreen(),
-      const AvailabilityScreen(),
-      const NotificationsScreen(),
+      const FeedScreen(),
+      const MessagesScreen(),
+      const MeScreen(),
       if (_isManager) const ManagerScreen(),
     ];
 
-    // Clamp tab index in case manager tab disappears.
     final safeTab = _tab.clamp(0, screens.length - 1);
 
     return Scaffold(
@@ -102,24 +88,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             label: 'Punch',
           ),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.event_available_outlined),
-            activeIcon: Icon(Icons.event_available_rounded),
-            label: 'Availability',
+            icon: Icon(Icons.dynamic_feed_outlined),
+            activeIcon: Icon(Icons.dynamic_feed_rounded),
+            label: 'Feed',
           ),
-          BottomNavigationBarItem(
-            icon: unreadCount > 0
-                ? Badge(
-                    label: Text('$unreadCount'),
-                    child: const Icon(Icons.notifications_none_rounded),
-                  )
-                : const Icon(Icons.notifications_none_rounded),
-            activeIcon: unreadCount > 0
-                ? Badge(
-                    label: Text('$unreadCount'),
-                    child: const Icon(Icons.notifications_rounded),
-                  )
-                : const Icon(Icons.notifications_rounded),
-            label: 'Notifications',
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.forum_outlined),
+            activeIcon: Icon(Icons.forum_rounded),
+            label: 'Messages',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline_rounded),
+            activeIcon: Icon(Icons.person_rounded),
+            label: 'Me',
           ),
           if (_isManager)
             const BottomNavigationBarItem(

@@ -8,6 +8,38 @@ import '../models/manager_models.dart';
 import '../widgets/account_menu.dart';
 
 // ---------------------------------------------------------------------------
+// Leave queue provider
+// ---------------------------------------------------------------------------
+
+final _leaveQueueProvider =
+    StreamProvider<List<LeaveQueueItem>>((ref) {
+  final repo = ref.watch(managerRepositoryProvider);
+  final ctrl = StreamController<List<LeaveQueueItem>>(sync: true);
+  void listener() => ctrl.add(repo.leaveQueue.value);
+  repo.leaveQueue.addListener(listener);
+  ctrl.add(repo.leaveQueue.value);
+  ref.onDispose(() {
+    repo.leaveQueue.removeListener(listener);
+    ctrl.close();
+  });
+  return ctrl.stream;
+});
+
+final _fixQueueProvider =
+    StreamProvider<List<FixRequestQueueItem>>((ref) {
+  final repo = ref.watch(managerRepositoryProvider);
+  final ctrl = StreamController<List<FixRequestQueueItem>>(sync: true);
+  void listener() => ctrl.add(repo.fixQueue.value);
+  repo.fixQueue.addListener(listener);
+  ctrl.add(repo.fixQueue.value);
+  ref.onDispose(() {
+    repo.fixQueue.removeListener(listener);
+    ctrl.close();
+  });
+  return ctrl.stream;
+});
+
+// ---------------------------------------------------------------------------
 // Providers
 // ---------------------------------------------------------------------------
 
@@ -61,7 +93,106 @@ class ManagerScreen extends ConsumerStatefulWidget {
   ConsumerState<ManagerScreen> createState() => _ManagerScreenState();
 }
 
-class _ManagerScreenState extends ConsumerState<ManagerScreen> {
+class _ManagerScreenState extends ConsumerState<ManagerScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl.addListener(() {
+      if (_tabCtrl.index == 1 || _tabCtrl.index == 2) {
+        ref.read(managerRepositoryProvider).refreshQueues();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoading = ref.watch(_loadingProvider).valueOrNull ?? false;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FA),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'Manager',
+          style: TextStyle(
+            color: Color(0xFF111827),
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+        actions: [
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded,
+                  color: Color(0xFF9CA3AF), size: 20),
+              onPressed: () => ref.read(managerRepositoryProvider).refresh(),
+            ),
+          const AccountMenu(),
+          const SizedBox(width: 4),
+        ],
+        bottom: TabBar(
+          controller: _tabCtrl,
+          labelColor: const Color(0xFF1B8A5A),
+          unselectedLabelColor: const Color(0xFF6B7280),
+          indicatorColor: const Color(0xFF1B8A5A),
+          labelStyle: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w600),
+          tabs: const [
+            Tab(text: 'Schedule'),
+            Tab(text: 'Leaves'),
+            Tab(text: 'Fix Requests'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabCtrl,
+        children: const [
+          _ScheduleTab(),
+          _LeavesQueueTab(),
+          _FixRequestsTab(),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Schedule tab (the original manager view)
+// ---------------------------------------------------------------------------
+
+class _ScheduleTab extends ConsumerStatefulWidget {
+  const _ScheduleTab();
+
+  @override
+  ConsumerState<_ScheduleTab> createState() => _ScheduleTabState();
+}
+
+class _ScheduleTabState extends ConsumerState<_ScheduleTab> {
   Future<void> _prevDay() async {
     final repo = ref.read(managerRepositoryProvider);
     await repo.setDate(
@@ -102,89 +233,580 @@ class _ManagerScreenState extends ConsumerState<ManagerScreen> {
   @override
   Widget build(BuildContext context) {
     final date = ref.watch(_selectedDateProvider).valueOrNull ?? DateTime.now();
-    final isLoading = ref.watch(_loadingProvider).valueOrNull ?? false;
     final canEdit = ref.read(managerRepositoryProvider).canEdit.value;
     final dailyAsync = ref.watch(_dailyViewProvider);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Manager',
-          style: TextStyle(
-            color: Color(0xFF111827),
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
-        actions: [
-          if (isLoading)
-            const Padding(
-              padding: EdgeInsets.only(right: 8),
-              child: Center(
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF9CA3AF),
+    return SafeArea(
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              _DateBar(
+                date: date,
+                onPrev: _prevDay,
+                onNext: _nextDay,
+                onTap: _pickDate,
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  color: const Color(0xFF1B8A5A),
+                  onRefresh: () =>
+                      ref.read(managerRepositoryProvider).refresh(),
+                  child: dailyAsync.when(
+                    data: (views) => views.isEmpty
+                        ? const _EmptyState()
+                        : _StaffList(
+                            views: views,
+                            canEdit: canEdit,
+                            onAddShift: (v) =>
+                                _openCreateSheet(forStaff: v),
+                          ),
+                    loading: () => const _EmptyState(),
+                    error: (_, __) => const _EmptyState(),
                   ),
                 ),
               ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded,
-                  color: Color(0xFF9CA3AF), size: 20),
-              onPressed: () => ref.read(managerRepositoryProvider).refresh(),
+            ],
+          ),
+          if (canEdit)
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: FloatingActionButton.extended(
+                onPressed: () => _openCreateSheet(),
+                backgroundColor: const Color(0xFF1B8A5A),
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add Shift',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
             ),
-          const AccountMenu(),
-          const SizedBox(width: 4),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Date selector bar
-            _DateBar(
-              date: date,
-              onPrev: _prevDay,
-              onNext: _nextDay,
-              onTap: _pickDate,
-            ),
-            // Staff list
-            Expanded(
-              child: RefreshIndicator(
-                color: const Color(0xFF1B8A5A),
-                onRefresh: () => ref.read(managerRepositoryProvider).refresh(),
-                child: dailyAsync.when(
-                  data: (views) => views.isEmpty
-                      ? const _EmptyState()
-                      : _StaffList(
-                          views: views,
-                          canEdit: canEdit,
-                          onAddShift: (v) => _openCreateSheet(forStaff: v),
-                        ),
-                  loading: () => const _EmptyState(),
-                  error: (_, __) => const _EmptyState(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Leaves queue tab
+// ---------------------------------------------------------------------------
+
+class _LeavesQueueTab extends ConsumerStatefulWidget {
+  const _LeavesQueueTab();
+
+  @override
+  ConsumerState<_LeavesQueueTab> createState() => _LeavesQueueTabState();
+}
+
+class _LeavesQueueTabState extends ConsumerState<_LeavesQueueTab> {
+  @override
+  void initState() {
+    super.initState();
+    ref.read(managerRepositoryProvider).refreshQueues();
+  }
+
+  Future<void> _decide(int leaveId, bool approve) async {
+    final ok =
+        await ref.read(managerRepositoryProvider).decideLeave(leaveId, approve);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok
+            ? approve
+                ? 'Leave approved.'
+                : 'Leave declined.'
+            : 'Failed. Try again.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final queueAsync = ref.watch(_leaveQueueProvider);
+
+    return SafeArea(
+      child: RefreshIndicator(
+        color: const Color(0xFF1B8A5A),
+        onRefresh: () =>
+            ref.read(managerRepositoryProvider).refreshQueues(),
+        child: queueAsync.when(
+          data: (items) => items.isEmpty
+              ? const _QueueEmptyState(
+                  icon: Icons.beach_access_outlined,
+                  message: 'No pending leave requests.',
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 16),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _LeaveQueueCard(
+                    item: items[i],
+                    onApprove: () => _decide(items[i].id, true),
+                    onDecline: () => _decide(items[i].id, false),
+                  ),
                 ),
+          loading: () => const _QueueEmptyState(
+            icon: Icons.beach_access_outlined,
+            message: 'Loading...',
+          ),
+          error: (_, __) => const _QueueEmptyState(
+            icon: Icons.beach_access_outlined,
+            message: 'Failed to load.',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LeaveQueueCard extends StatelessWidget {
+  const _LeaveQueueCard({
+    required this.item,
+    required this.onApprove,
+    required this.onDecline,
+  });
+  final LeaveQueueItem item;
+  final VoidCallback onApprove;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(6),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor:
+                    const Color(0xFF1B8A5A).withAlpha(22),
+                child: Text(
+                  _initials(item.fullName),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1B8A5A),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.fullName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B8A5A).withAlpha(18),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  _capitalize(item.leaveType),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1B8A5A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.date_range_outlined,
+                  size: 13, color: Color(0xFF9CA3AF)),
+              const SizedBox(width: 4),
+              Text(
+                '${_fmtDate(item.startDate)} – ${_fmtDate(item.endDate)}',
+                style: const TextStyle(
+                    fontSize: 13, color: Color(0xFF374151)),
+              ),
+            ],
+          ),
+          if (item.reason != null && item.reason!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              item.reason!,
+              style: const TextStyle(
+                  fontSize: 12, color: Color(0xFF6B7280)),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onDecline,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFB91C1C),
+                    side: const BorderSide(
+                        color: Color(0xFFFCA5A5)),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Decline',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onApprove,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B8A5A),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Approve',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  String _fmtDate(String date) {
+    try {
+      final dt = DateTime.parse(date);
+      const months = [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${dt.day} ${months[dt.month]}';
+    } catch (_) {
+      return date;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fix requests tab
+// ---------------------------------------------------------------------------
+
+class _FixRequestsTab extends ConsumerStatefulWidget {
+  const _FixRequestsTab();
+
+  @override
+  ConsumerState<_FixRequestsTab> createState() => _FixRequestsTabState();
+}
+
+class _FixRequestsTabState extends ConsumerState<_FixRequestsTab> {
+  @override
+  void initState() {
+    super.initState();
+    ref.read(managerRepositoryProvider).refreshQueues();
+  }
+
+  Future<void> _decide(int fixId, bool accept) async {
+    final ok =
+        await ref.read(managerRepositoryProvider).decideFixRequest(fixId, accept);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok
+            ? accept
+                ? 'Fix request accepted.'
+                : 'Fix request denied.'
+            : 'Failed. Try again.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final queueAsync = ref.watch(_fixQueueProvider);
+
+    return SafeArea(
+      child: RefreshIndicator(
+        color: const Color(0xFF1B8A5A),
+        onRefresh: () =>
+            ref.read(managerRepositoryProvider).refreshQueues(),
+        child: queueAsync.when(
+          data: (items) => items.isEmpty
+              ? const _QueueEmptyState(
+                  icon: Icons.build_outlined,
+                  message: 'No pending fix requests.',
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 16),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _FixRequestCard(
+                    item: items[i],
+                    onAccept: () => _decide(items[i].id, true),
+                    onDeny: () => _decide(items[i].id, false),
+                  ),
+                ),
+          loading: () => const _QueueEmptyState(
+            icon: Icons.build_outlined,
+            message: 'Loading...',
+          ),
+          error: (_, __) => const _QueueEmptyState(
+            icon: Icons.build_outlined,
+            message: 'Failed to load.',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FixRequestCard extends StatelessWidget {
+  const _FixRequestCard({
+    required this.item,
+    required this.onAccept,
+    required this.onDeny,
+  });
+  final FixRequestQueueItem item;
+  final VoidCallback onAccept;
+  final VoidCallback onDeny;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(6),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor:
+                    const Color(0xFFD97706).withAlpha(22),
+                child: Text(
+                  _initials(item.fullName),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFD97706),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.fullName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+              if (item.punchType != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD97706).withAlpha(18),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    _formatPunchType(item.punchType!),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFD97706),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.access_time_rounded,
+                  size: 13, color: Color(0xFF9CA3AF)),
+              const SizedBox(width: 4),
+              Text(
+                'Proposed: ${_fmtTs(item.proposedTs)}',
+                style: const TextStyle(
+                    fontSize: 13, color: Color(0xFF374151)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            item.reason,
+            style: const TextStyle(
+                fontSize: 12, color: Color(0xFF6B7280)),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onDeny,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFB91C1C),
+                    side: const BorderSide(
+                        color: Color(0xFFFCA5A5)),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Deny',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onAccept,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B8A5A),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Accept',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  String _formatPunchType(String t) => switch (t) {
+        'in' => 'Clock In',
+        'out' => 'Clock Out',
+        'unpaid_in' => 'Break Start',
+        'unpaid_out' => 'Break End',
+        _ => t,
+      };
+
+  String _fmtTs(String ts) {
+    try {
+      final dt = DateTime.parse(ts).toLocal();
+      final h = dt.hour;
+      final m = dt.minute.toString().padLeft(2, '0');
+      final period = h >= 12 ? 'PM' : 'AM';
+      final hour = h % 12 == 0 ? 12 : h % 12;
+      const months = [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${dt.day} ${months[dt.month]}, $hour:$m $period';
+    } catch (_) {
+      return ts;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared empty state for queues
+// ---------------------------------------------------------------------------
+
+class _QueueEmptyState extends StatelessWidget {
+  const _QueueEmptyState({required this.icon, required this.message});
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: const Color(0xFFD1D5DB)),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF374151),
               ),
             ),
           ],
         ),
       ),
-      floatingActionButton: canEdit
-          ? FloatingActionButton.extended(
-              onPressed: () => _openCreateSheet(),
-              backgroundColor: const Color(0xFF1B8A5A),
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Shift',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-            )
-          : null,
     );
   }
 }

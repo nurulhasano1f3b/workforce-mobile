@@ -63,6 +63,68 @@ class StaffDayView {
   }
 }
 
+class LeaveQueueItem {
+  const LeaveQueueItem({
+    required this.id,
+    required this.fullName,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    this.reason,
+  });
+
+  final int id;
+  final String fullName;
+  final String leaveType;
+  final String startDate;
+  final String endDate;
+  final String? reason;
+
+  factory LeaveQueueItem.fromJson(Map<String, dynamic> json) =>
+      LeaveQueueItem(
+        id: json['id'] as int,
+        fullName: (json['full_name'] as String?) ?? '',
+        leaveType: (json['leave_type'] as String?) ?? 'annual',
+        startDate: (json['start_date'] as String?) ?? '',
+        endDate: (json['end_date'] as String?) ?? '',
+        reason: json['reason'] as String?,
+      );
+}
+
+class FixRequestQueueItem {
+  const FixRequestQueueItem({
+    required this.id,
+    required this.fullName,
+    required this.proposedTs,
+    required this.reason,
+    required this.createdAt,
+    this.punchType,
+    this.originalType,
+    this.originalTs,
+  });
+
+  final int id;
+  final String fullName;
+  final String proposedTs;
+  final String reason;
+  final String createdAt;
+  final String? punchType;
+  final String? originalType;
+  final String? originalTs;
+
+  factory FixRequestQueueItem.fromJson(Map<String, dynamic> json) =>
+      FixRequestQueueItem(
+        id: json['id'] as int,
+        fullName: (json['full_name'] as String?) ?? '',
+        proposedTs: (json['proposed_ts'] as String?) ?? '',
+        reason: (json['reason'] as String?) ?? '',
+        createdAt: (json['created_at'] as String?) ?? '',
+        punchType: json['punch_type'] as String?,
+        originalType: json['original_type'] as String?,
+        originalTs: json['original_ts'] as String?,
+      );
+}
+
 /// A shift on the team view (manager perspective).
 class TeamShift {
   const TeamShift({

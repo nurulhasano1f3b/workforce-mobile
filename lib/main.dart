@@ -8,9 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
+import 'data/announcements_repository.dart';
 import 'data/availability_repository.dart';
+import 'data/feed_repository.dart';
+import 'data/leaves_repository.dart';
 import 'data/manager_repository.dart';
+import 'data/messages_repository.dart';
 import 'data/notifications_repository.dart';
+import 'data/payslips_repository.dart';
 import 'data/providers.dart';
 import 'data/punch_repository.dart';
 import 'data/shifts_repository.dart';
@@ -57,12 +62,22 @@ void main() async {
   final availRepo = AvailabilityRepository();
   final userRepo = UserRepository();
   final managerRepo = ManagerRepository();
+  final leavesRepo = LeavesRepository();
+  final payslipsRepo = PayslipsRepository();
+  final messagesRepo = MessagesRepository();
+  final feedRepo = FeedRepository();
+  final announcementsRepo = AnnouncementsRepository();
   if (punchRepo.isLoggedIn) {
     await shiftsRepo.init(punchRepo.token);
     await notifRepo.init(punchRepo.token);
     await availRepo.init(punchRepo.token);
     userRepo.updateToken(punchRepo.token);
     unawaited(managerRepo.init(punchRepo.token));
+    unawaited(leavesRepo.init(punchRepo.token));
+    unawaited(payslipsRepo.init(punchRepo.token));
+    unawaited(messagesRepo.init(punchRepo.token));
+    unawaited(feedRepo.init(punchRepo.token));
+    unawaited(announcementsRepo.init(punchRepo.token));
   }
 
   runApp(
@@ -74,6 +89,11 @@ void main() async {
         availabilityRepositoryProvider.overrideWithValue(availRepo),
         userRepositoryProvider.overrideWithValue(userRepo),
         managerRepositoryProvider.overrideWithValue(managerRepo),
+        leavesRepositoryProvider.overrideWithValue(leavesRepo),
+        payslipsRepositoryProvider.overrideWithValue(payslipsRepo),
+        messagesRepositoryProvider.overrideWithValue(messagesRepo),
+        feedRepositoryProvider.overrideWithValue(feedRepo),
+        announcementsRepositoryProvider.overrideWithValue(announcementsRepo),
       ],
       child: const WorkforceApp(),
     ),

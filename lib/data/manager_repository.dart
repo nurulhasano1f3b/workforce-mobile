@@ -37,6 +37,11 @@ class ManagerRepository {
 
   final ValueNotifier<bool> isLoading = ValueNotifier(false);
 
+  final ValueNotifier<List<LeaveQueueItem>> leaveQueue =
+      ValueNotifier(const []);
+  final ValueNotifier<List<FixRequestQueueItem>> fixQueue =
+      ValueNotifier(const []);
+
   // ---------------------------------------------------------------------------
   // Init / token
   // ---------------------------------------------------------------------------
@@ -55,6 +60,8 @@ class ManagerRepository {
       canEdit.value = false;
       staff.value = const [];
       dailyView.value = const [];
+      leaveQueue.value = const [];
+      fixQueue.value = const [];
     } else {
       unawaited(init(token));
     }
@@ -71,6 +78,101 @@ class ManagerRepository {
 
   Future<void> refresh() async {
     await _fetchDaily(selectedDate.value);
+  }
+
+  Future<void> refreshQueues() async {
+    if (_token == null || !isManager.value) return;
+    await Future.wait([_fetchLeaveQueue(), _fetchFixQueue()]);
+  }
+
+  Future<void> _fetchLeaveQueue() async {
+    if (_token == null) return;
+    try {
+      final resp = await _http.get(
+        Uri.parse('$_base/m/leaves/queue'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (resp.statusCode == 200) {
+        final list = jsonDecode(resp.body) as List<dynamic>;
+        leaveQueue.value = list
+            .map((e) =>
+                LeaveQueueItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } on SocketException {
+      // Offline.
+    } on http.ClientException {
+      // Network error.
+    }
+  }
+
+  Future<void> _fetchFixQueue() async {
+    if (_token == null) return;
+    try {
+      final resp = await _http.get(
+        Uri.parse('$_base/m/timecard/fix-requests/queue'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (resp.statusCode == 200) {
+        final list = jsonDecode(resp.body) as List<dynamic>;
+        fixQueue.value = list
+            .map((e) =>
+                FixRequestQueueItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } on SocketException {
+      // Offline.
+    } on http.ClientException {
+      // Network error.
+    }
+  }
+
+  Future<bool> decideLeave(int leaveId, bool approve) async {
+    if (_token == null) return false;
+    try {
+      final resp = await _http.post(
+        Uri.parse('$_base/m/leaves/$leaveId/decide'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'approve': approve}),
+      );
+      if (resp.statusCode != 200) return false;
+      leaveQueue.value =
+          leaveQueue.value.where((l) => l.id != leaveId).toList();
+      return true;
+    } on SocketException {
+      return false;
+    } on http.ClientException {
+      return false;
+    }
+  }
+
+  Future<bool> decideFixRequest(int fixId, bool accept,
+      {String? note}) async {
+    if (_token == null) return false;
+    try {
+      final resp = await _http.post(
+        Uri.parse('$_base/m/timecard/fix-requests/$fixId/decide'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'accept': accept,
+          if (note != null && note.isNotEmpty) 'note': note,
+        }),
+      );
+      if (resp.statusCode != 200) return false;
+      fixQueue.value =
+          fixQueue.value.where((f) => f.id != fixId).toList();
+      return true;
+    } on SocketException {
+      return false;
+    } on http.ClientException {
+      return false;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -275,6 +377,8 @@ class ManagerRepository {
     selectedDate.dispose();
     dailyView.dispose();
     isLoading.dispose();
+    leaveQueue.dispose();
+    fixQueue.dispose();
     _http.close();
   }
 }

@@ -33,12 +33,23 @@ class AccountMenu extends ConsumerWidget {
 
             final managerRepo = ref.read(managerRepositoryProvider);
 
+            final leavesRepo = ref.read(leavesRepositoryProvider);
+            final payslipsRepo = ref.read(payslipsRepositoryProvider);
+            final messagesRepo = ref.read(messagesRepositoryProvider);
+            final feedRepo = ref.read(feedRepositoryProvider);
+            final announcementsRepo = ref.read(announcementsRepositoryProvider);
+
             await punchRepo.logout();
             shiftsRepo.updateToken(null);
             notifRepo.updateToken(null);
             availRepo.updateToken(null);
             managerRepo.updateToken(null);
             userRepo.clear();
+            leavesRepo.updateToken(null);
+            payslipsRepo.updateToken(null);
+            messagesRepo.updateToken(null);
+            feedRepo.updateToken(null);
+            announcementsRepo.updateToken(null);
 
             if (context.mounted) {
               unawaited(Navigator.of(context).pushAndRemoveUntil(

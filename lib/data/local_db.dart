@@ -15,7 +15,7 @@ import 'package:sqflite/sqflite.dart';
 /// A punch with pending_sync = 1 has not yet received a 201 from the server.
 
 const _dbName = 'workforce.db';
-const _dbVersion = 5;
+const _dbVersion = 6;
 
 /// Column names — defined as constants to catch typos at compile time.
 const tPunches = 'punches';
@@ -56,6 +56,27 @@ const colRequestId = 'request_id';
 const colPrevStartsAt = 'prev_starts_at';
 const colPrevEndsAt = 'prev_ends_at';
 const colPrevDept = 'prev_dept';
+
+// Announcements table
+const tAnnouncements = 'announcements';
+const colAnnouncementTitle = 'title';
+
+// Leaves table
+const tLeaves = 'leaves';
+const colLeaveId = 'leave_id';
+const colLeaveType = 'leave_type';
+const colStartDate = 'start_date';
+const colEndDate = 'end_date';
+const colReason = 'reason';
+
+// Payslips table
+const tPayslips = 'payslips';
+const colPayslipId = 'payslip_id';
+const colPeriodStart = 'period_start';
+const colPeriodEnd = 'period_end';
+const colGrossCents = 'gross_cents';
+const colNetCents = 'net_cents';
+const colDocumentUrl = 'document_url';
 
 // Availability tables
 const tAvailPatterns = 'avail_patterns';
@@ -127,6 +148,9 @@ class LocalDb {
     await _createNotificationsTable(db);
     await _createAvailTables(db);
     await _createRosterRequestsTable(db);
+    await _createAnnouncementsTable(db);
+    await _createLeavesTable(db);
+    await _createPayslipsTable(db);
   }
 
   Future<void> _createShiftsTable(Database db) async {
@@ -181,6 +205,44 @@ class LocalDb {
     ''');
   }
 
+  Future<void> _createAnnouncementsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $tAnnouncements (
+        $colNotifId    INTEGER PRIMARY KEY,
+        $colAnnouncementTitle TEXT NOT NULL,
+        $colBody       TEXT,
+        $colCreatedAt  TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createLeavesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $tLeaves (
+        $colLeaveId   INTEGER PRIMARY KEY,
+        $colLeaveType TEXT NOT NULL,
+        $colStartDate TEXT NOT NULL,
+        $colEndDate   TEXT NOT NULL,
+        $colReason    TEXT,
+        $colStatus    TEXT NOT NULL,
+        $colCreatedAt TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createPayslipsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $tPayslips (
+        $colPayslipId  INTEGER PRIMARY KEY,
+        $colPeriodStart TEXT NOT NULL,
+        $colPeriodEnd   TEXT NOT NULL,
+        $colGrossCents  INTEGER NOT NULL,
+        $colNetCents    INTEGER NOT NULL,
+        $colDocumentUrl TEXT
+      )
+    ''');
+  }
+
   Future<void> _createRosterRequestsTable(Database db) async {
     await db.execute('''
       CREATE TABLE $tRosterRequests (
@@ -215,6 +277,11 @@ class LocalDb {
           'ALTER TABLE $tRosterRequests ADD COLUMN $colPrevEndsAt TEXT');
       await db.execute(
           'ALTER TABLE $tRosterRequests ADD COLUMN $colPrevDept TEXT');
+    }
+    if (oldVersion < 6) {
+      await _createAnnouncementsTable(db);
+      await _createLeavesTable(db);
+      await _createPayslipsTable(db);
     }
   }
 
@@ -333,6 +400,9 @@ class LocalDb {
       await txn.delete(tAvailPatterns);
       await txn.delete(tAvailExceptions);
       await txn.delete(tRosterRequests);
+      await txn.delete(tAnnouncements);
+      await txn.delete(tLeaves);
+      await txn.delete(tPayslips);
     });
   }
 
@@ -433,5 +503,83 @@ class LocalDb {
     final d = await db;
     await d.delete(tRosterRequests,
         where: '$colRequestId = ?', whereArgs: [requestId]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Announcements helpers
+  // ---------------------------------------------------------------------------
+
+  Future<void> upsertAnnouncement(Map<String, dynamic> row) async {
+    final d = await db;
+    await d.insert(tAnnouncements, row,
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> queryAnnouncements() async {
+    final d = await db;
+    return d.query(tAnnouncements, orderBy: '$colCreatedAt DESC');
+  }
+
+  Future<void> replaceAnnouncements(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete(tAnnouncements);
+      for (final row in rows) {
+        await txn.insert(tAnnouncements, row,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Leaves helpers
+  // ---------------------------------------------------------------------------
+
+  Future<void> upsertLeave(Map<String, dynamic> row) async {
+    final d = await db;
+    await d.insert(tLeaves, row,
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> queryLeaves() async {
+    final d = await db;
+    return d.query(tLeaves, orderBy: '$colCreatedAt DESC');
+  }
+
+  Future<void> replaceLeaves(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete(tLeaves);
+      for (final row in rows) {
+        await txn.insert(tLeaves, row,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Payslips helpers
+  // ---------------------------------------------------------------------------
+
+  Future<void> upsertPayslip(Map<String, dynamic> row) async {
+    final d = await db;
+    await d.insert(tPayslips, row,
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> queryPayslips() async {
+    final d = await db;
+    return d.query(tPayslips, orderBy: '$colPeriodEnd DESC');
+  }
+
+  Future<void> replacePayslips(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete(tPayslips);
+      for (final row in rows) {
+        await txn.insert(tPayslips, row,
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
   }
 }
