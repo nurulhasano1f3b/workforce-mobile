@@ -215,6 +215,41 @@ class ManagerRepository {
     }
   }
 
+  /// Update time and/or department on an existing shift.
+  /// Returns the new status string, or null on failure.
+  Future<String?> updateShift(
+    int shiftId, {
+    DateTime? startsAt,
+    DateTime? endsAt,
+    String? department,
+  }) async {
+    if (_token == null) return null;
+    try {
+      final body = <String, dynamic>{};
+      if (startsAt != null) body['startsAt'] = startsAt.toIso8601String();
+      if (endsAt != null) body['endsAt'] = endsAt.toIso8601String();
+      if (department != null) body['department'] = department;
+
+      final resp = await _http.patch(
+        Uri.parse('$_base/m/roster/$shiftId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode(body),
+      );
+      if (resp.statusCode != 200) return null;
+      final status =
+          (jsonDecode(resp.body) as Map)['status'] as String? ?? 'draft';
+      unawaited(_fetchDaily(selectedDate.value));
+      return status;
+    } on SocketException {
+      return null;
+    } on http.ClientException {
+      return null;
+    }
+  }
+
   /// Delete a draft/declined shift.
   Future<bool> deleteShift(int shiftId) async {
     if (_token == null) return false;

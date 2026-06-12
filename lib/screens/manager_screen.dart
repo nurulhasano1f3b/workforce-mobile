@@ -353,6 +353,15 @@ class _StaffCardState extends ConsumerState<_StaffCard> {
     );
   }
 
+  void _openEdit(TeamShift shift) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditShiftSheet(shift: shift),
+    );
+  }
+
   Future<void> _delete(int shiftId) async {
     setState(() => _deleting = true);
     final ok = await ref.read(managerRepositoryProvider).deleteShift(shiftId);
@@ -465,6 +474,9 @@ class _StaffCardState extends ConsumerState<_StaffCard> {
                     shift: sh,
                     publishing: _publishing,
                     deleting: _deleting,
+                    onEdit: sh.status != 'declined'
+                        ? () => _openEdit(sh)
+                        : null,
                     onPublish: widget.canEdit && sh.status == 'draft'
                         ? () => _publish(sh.id)
                         : null,
@@ -544,6 +556,7 @@ class _ShiftRow extends StatelessWidget {
     required this.shift,
     required this.publishing,
     required this.deleting,
+    this.onEdit,
     this.onPublish,
     this.onDelete,
     this.onAddAnother,
@@ -552,6 +565,7 @@ class _ShiftRow extends StatelessWidget {
   final TeamShift shift;
   final bool publishing;
   final bool deleting;
+  final VoidCallback? onEdit;
   final VoidCallback? onPublish;
   final VoidCallback? onDelete;
   final VoidCallback? onAddAnother;
@@ -588,27 +602,42 @@ class _ShiftRow extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusColor.withAlpha(26),
-                  border:
-                      Border.all(color: statusColor.withAlpha(80)),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: statusColor,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusColor.withAlpha(26),
+                      border: Border.all(color: statusColor.withAlpha(80)),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
                   ),
-                ),
+                  if (onEdit != null) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: onEdit,
+                      child: const Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
-          if (onPublish != null || onDelete != null) ...[
+          if (onPublish != null || onDelete != null || onAddAnother != null) ...[
             const SizedBox(height: 8),
             Row(
               children: [
@@ -628,17 +657,17 @@ class _ShiftRow extends StatelessWidget {
                   ),
                 const Spacer(),
                 if (onAddAnother != null)
-                GestureDetector(
-                  onTap: onAddAnother,
-                  child: const Text(
-                    '+ Another',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6B7280),
-                      decoration: TextDecoration.underline,
+                  GestureDetector(
+                    onTap: onAddAnother,
+                    child: const Text(
+                      '+ Another',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ],
@@ -1160,4 +1189,267 @@ class _StaffDropdown extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Edit shift bottom sheet
+// ---------------------------------------------------------------------------
+
+class _EditShiftSheet extends ConsumerStatefulWidget {
+  const _EditShiftSheet({required this.shift});
+  final TeamShift shift;
+
+  @override
+  ConsumerState<_EditShiftSheet> createState() => _EditShiftSheetState();
+}
+
+class _EditShiftSheetState extends ConsumerState<_EditShiftSheet> {
+  late TimeOfDay _startTime;
+  late TimeOfDay _endTime;
+  late String _department;
+  bool _saving = false;
+  String? _error;
+
+  static const _departments = [
+    'general', 'produce', 'dairy', 'bakery',
+    'deli', 'frozen', 'cashier', 'stockroom',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _startTime = TimeOfDay(
+        hour: widget.shift.startsAt.hour,
+        minute: widget.shift.startsAt.minute);
+    _endTime = TimeOfDay(
+        hour: widget.shift.endsAt.hour,
+        minute: widget.shift.endsAt.minute);
+    _department = widget.shift.department ?? 'general';
+  }
+
+  bool get _hasChanges {
+    final origStart = TimeOfDay(
+        hour: widget.shift.startsAt.hour,
+        minute: widget.shift.startsAt.minute);
+    final origEnd = TimeOfDay(
+        hour: widget.shift.endsAt.hour,
+        minute: widget.shift.endsAt.minute);
+    return _startTime != origStart ||
+        _endTime != origEnd ||
+        _department != (widget.shift.department ?? 'general');
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _startTime : _endTime,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme:
+              const ColorScheme.light(primary: Color(0xFF1B8A5A)),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() => isStart ? _startTime = picked : _endTime = picked);
+  }
+
+  Future<void> _save() async {
+    if (!_hasChanges) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    final base = widget.shift.startsAt;
+    var starts = DateTime(
+        base.year, base.month, base.day, _startTime.hour, _startTime.minute);
+    var ends = DateTime(
+        base.year, base.month, base.day, _endTime.hour, _endTime.minute);
+    if (ends.isBefore(starts)) ends = ends.add(const Duration(days: 1));
+    if (ends == starts) {
+      setState(() {
+        _saving = false;
+        _error = 'Start and end time cannot be the same.';
+      });
+      return;
+    }
+
+    final repo = ref.read(managerRepositoryProvider);
+    final result = await repo.updateShift(
+      widget.shift.id,
+      startsAt: starts,
+      endsAt: ends,
+      department: _department,
+    );
+
+    if (!mounted) return;
+    setState(() => _saving = false);
+
+    if (result == null) {
+      setState(() => _error = 'Failed to save. Try again.');
+      return;
+    }
+
+    Navigator.pop(context);
+    final msg = result == 'pending_accept'
+        ? 'Shift updated — new time outside availability, request sent.'
+        : 'Shift updated.';
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65,
+      minChildSize: 0.45,
+      maxChildSize: 0.9,
+      builder: (_, controller) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD1D5DB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  const Text(
+                    'Edit Shift',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF111827),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    widget.shift.department ?? 'General',
+                    style: const TextStyle(
+                        fontSize: 13, color: Color(0xFF6B7280)),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: controller,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 16),
+                children: [
+                  const _FieldLabel(label: 'Time'),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TimeTile(
+                          label: 'Start',
+                          time: _startTime,
+                          onTap: () => _pickTime(true),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _TimeTile(
+                          label: 'End',
+                          time: _endTime,
+                          onTap: () => _pickTime(false),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const _FieldLabel(label: 'Department'),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _departments.map((d) {
+                      final selected = _department == d;
+                      return GestureDetector(
+                        onTap: () => setState(() => _department = d),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? const Color(0xFF1B8A5A)
+                                : const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _capitalize(d),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: selected
+                                  ? Colors.white
+                                  : const Color(0xFF374151),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(_error!,
+                        style: const TextStyle(
+                            color: Color(0xFFB91C1C), fontSize: 13)),
+                  ],
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saving ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _hasChanges
+                            ? const Color(0xFF1B8A5A)
+                            : const Color(0xFF9CA3AF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('Save Changes',
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
